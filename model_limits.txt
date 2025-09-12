@@ -1,0 +1,62 @@
+# Список моделей и их максимальная длина входного контекста
+# Формат: model_id - input_token_limit
+----------------------------------------
+embedding-gecko-001 - 1024
+gemini-1.5-pro-latest - 2000000
+gemini-1.5-pro-002 - 2000000
+gemini-1.5-pro - 2000000
+gemini-1.5-flash-latest - 1000000
+gemini-1.5-flash - 1000000
+gemini-1.5-flash-002 - 1000000
+gemini-1.5-flash-8b - 1000000
+gemini-1.5-flash-8b-001 - 1000000
+gemini-1.5-flash-8b-latest - 1000000
+gemini-2.5-pro-preview-03-25 - 1048576
+gemini-2.5-flash-preview-05-20 - 1048576
+gemini-2.5-flash - 1048576
+gemini-2.5-flash-lite-preview-06-17 - 1048576
+gemini-2.5-pro-preview-05-06 - 1048576
+gemini-2.5-pro-preview-06-05 - 1048576
+gemini-2.5-pro - 1048576
+gemini-2.0-flash-exp - 1048576
+gemini-2.0-flash - 1048576
+gemini-2.0-flash-001 - 1048576
+gemini-2.0-flash-lite-001 - 1048576
+gemini-2.0-flash-lite - 1048576
+gemini-2.0-flash-lite-preview-02-05 - 1048576
+gemini-2.0-flash-lite-preview - 1048576
+gemini-2.0-pro-exp - 1048576
+gemini-2.0-pro-exp-02-05 - 1048576
+gemini-exp-1206 - 1048576
+gemini-2.0-flash-thinking-exp-01-21 - 1048576
+gemini-2.0-flash-thinking-exp - 1048576
+gemini-2.0-flash-thinking-exp-1219 - 1048576
+gemini-2.5-flash-preview-tts - 8192
+gemini-2.5-pro-preview-tts - 8192
+learnlm-2.0-flash-experimental - 1048576
+gemma-3-1b-it - 32768
+gemma-3-4b-it - 32768
+gemma-3-12b-it - 32768
+gemma-3-27b-it - 131072
+gemma-3n-e4b-it - 8192
+gemma-3n-e2b-it - 8192
+gemini-2.5-flash-lite - 1048576
+embedding-001 - 2048
+text-embedding-004 - 2048
+gemini-embedding-exp-03-07 - 8192
+gemini-embedding-exp - 8192
+gemini-embedding-001 - 2048
+aqa - 7168
+imagen-3.0-generate-002 - 480
+imagen-4.0-generate-preview-06-06 - 480
+imagen-4.0-ultra-generate-preview-06-06 - 480
+veo-2.0-generate-001 - 480
+veo-3.0-generate-preview - 480
+veo-3.0-fast-generate-preview - 480
+gemini-2.5-flash-preview-native-audio-dialog - 131072
+gemini-2.5-flash-exp-native-audio-thinking-dialog - 131072
+gemini-2.0-flash-live-001 - 131072
+gemini-live-2.5-flash-preview - 1048576
+gemini-2.5-flash-live-preview - 1048576
+----------------------------------------
+Всего обработано моделей: 57

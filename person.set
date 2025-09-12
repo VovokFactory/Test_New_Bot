@@ -1,0 +1,9 @@
+# person.set
+# Укажите роль ассистента или оставьте пустым/null/0 для стандартного режима
+# Примеры:
+# ROLE = Morpheus
+# ROLE = Trinity
+# ROLE = null
+
+[DEFAULT]
+ROLE = null

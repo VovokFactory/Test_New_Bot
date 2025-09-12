@@ -1,0 +1,88 @@
+Test_Bot_AI/
+├── bot
+│   ├── handlers
+│   │   ├── __init__.py
+│   │   ├── model_handler.py
+│   │   ├── photo_handler.py
+│   │   ├── settings_handler.py
+│   │   ├── start_handler.py
+│   │   ├── text_handler.py
+│   │   └── voice_handler.py
+│   └── __init__.py
+├── models
+│   ├── __init__.py
+│   └── chat_models.py
+├── services
+│   ├── __init__.py
+│   ├── audio_service.py
+│   ├── context_service.py
+│   ├── gemini_service.py
+│   └── voice_queue.py
+├── temp
+├── test_code
+│   ├── audio_2025-07-31_01-32-18.ogg
+│   ├── audio_2025-07-31_02-33-18.ogg
+│   ├── audio_2025-07-31_02-33-26.ogg
+│   ├── audio_2025-07-31_02-33-31.ogg
+│   ├── audio_2025-07-31_02-33-35.ogg
+│   ├── audio_2025-07-31_02-33-40.ogg
+│   ├── audio_2025-07-31_02-33-43.ogg
+│   ├── dvislobokov_faster-whisper-large-v3-turbo-russian.txt
+│   ├── sentencepiece-0.2.0-cp312-cp312-win_amd64.whl
+│   ├── Systran_faster-whisper-base.txt
+│   ├── Systran_faster-whisper-medium.txt
+│   ├── Systran_faster-whisper-small-int8.txt
+│   ├── Systran_faster-whisper-small.txt
+│   ├── Systran_faster-whisper-tiny.txt
+│   ├── test.py
+│   ├── test_all_gsst.py
+│   ├── Test_giga_long.py
+│   ├── Test_giga_new.py
+│   ├── test_giga_old.py
+│   ├── test_google_sst.py
+│   ├── test_gtts.py
+│   ├── test_hf_wisp.py
+│   ├── test_hf_wisp2.py
+│   └── test_loc_whisp.py
+├── utils
+│   ├── __init__.py
+│   └── helpers.py
+├── .env
+├── .rsyncignore
+├── 1420597113.opus
+├── 1420597113.wav
+├── audio_2025-07-31_01-32-18.ogg
+├── audio_2025-07-31_02-33-18.ogg
+├── audio_2025-07-31_02-33-26.ogg
+├── audio_2025-07-31_02-33-31.ogg
+├── audio_2025-07-31_02-33-35.ogg
+├── audio_2025-07-31_02-33-40.ogg
+├── audio_2025-07-31_02-33-43.ogg
+├── audio_2025-08-02_22-43-31.ogg
+├── audio_utils for 6_20.py
+├── audio_utils.py
+├── audio_utils_for 5_41.py
+├── audio_utils_old.py
+├── bot_debug.log
+├── Bot_v5_41.py
+├── Bot_v5_42.py
+├── Bot_v5_42_test_aud.py
+├── Bot_v6_01 Whisper.py
+├── Bot_v6_01.py
+├── Bot_v6_11.py
+├── Bot_v6_20.py
+├── config.py
+├── deploy.old
+├── Get_Tree.ps1
+├── main.py
+├── main_old2.py
+├── main_v7_01.py
+├── main_v7_02.py
+├── main_v7_03.py
+├── make_tree.py
+├── mod_llm.py
+├── processing_time.log
+├── requirements.txt
+├── tts.log
+├── voice.opus
+└── voice.txt
