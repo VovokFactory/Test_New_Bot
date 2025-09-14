@@ -183,3 +183,29 @@ def get_model_limit_for_chat(chat_id: int) -> int:
         default_limit = 32768
         return default_limit
 # --- Конец обновлённой функции для получения лимита модели ---
+
+# --- Вспомогательная сводка контекста для UI настроек ---
+def get_context_info(chat_id: int) -> dict:
+    """
+    Возвращает краткую сводку контекста и текущих настроек для экрана настроек.
+    """
+    ctx = get_context(chat_id)  # список dict {'role','content','timestamp'}
+    message_count = len(ctx)
+    last_message_time = ctx[-1]['timestamp'].isoformat() if ctx else "Нет данных"
+
+    # Информация о текущей модели
+    try:
+        model_info = get_chat_model_info(chat_id)
+        current_model = model_info.get('id', 'unknown')
+    except Exception:
+        current_model = "unknown"
+
+    # Если в проекте нет реального счётчика токенов, возвращаем 0 как заглушку
+    token_count = 0
+
+    return {
+        "message_count": message_count,
+        "token_count": token_count,
+        "last_message_time": last_message_time,
+        "current_model": current_model,
+    }

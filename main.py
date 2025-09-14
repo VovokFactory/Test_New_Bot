@@ -1,74 +1,65 @@
-# main.py
+# main.py (aiogram 3.x)
+import asyncio
 import logging
-from config import LOG_TO_CONSOLE
-from dotenv import load_dotenv
 import os
 
-# Загрузка переменных окружения в самом начале
+from dotenv import load_dotenv
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+
+from config import LOG_TO_CONSOLE, VOICE_WORKERS_COUNT
+from bot.handlers.__init__old import register_handlers
+from services.voice_queue import get_voice_queue
+
 load_dotenv(override=True)
 
-# Настройка логирования после загрузки .env
-log_handlers = [logging.FileHandler("bot_debug.log", encoding='utf-8')]
-
+handlers = [logging.FileHandler("bot_debug.log", encoding="utf-8")]
 if LOG_TO_CONSOLE:
-    from logging import StreamHandler
-    log_handlers.append(StreamHandler())
+    handlers.append(logging.StreamHandler())
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=log_handlers
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=handlers,
 )
-
 logger = logging.getLogger(__name__)
 
-# Импорт после настройки логирования и загрузки .env
-from telebot import TeleBot
-from bot.handlers import register_handlers
-# Импорт для работы с очередью
-from services.voice_queue import get_voice_queue
-
-
-# Получение токена после загрузки .env
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-
 if not TELEGRAM_TOKEN:
-    raise ValueError("TELEGRAM_TOKEN не найден в .env файле!")
+    raise RuntimeError("TELEGRAM_TOKEN не задан в .env")
 
-# Создание экземпляра бота
-bot = TeleBot(TELEGRAM_TOKEN)
+bot = Bot(token=TELEGRAM_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
 
-# Инициализация очереди обработки голоса (но еще не запускаем)
-voice_queue = get_voice_queue(bot)
+voice_queue = None
 
-# Регистрация обработчиков
-register_handlers(bot)
+async def on_startup():
+    global voice_queue
+    loop = asyncio.get_running_loop()
+    voice_queue = get_voice_queue(bot, loop)
 
-# Запуск очереди обработки голоса ПОСЛЕ регистрации всех хендлеров
-voice_queue.start()
+    google_key = os.getenv("GOOGLE_API_KEY")
+    if not google_key:
+        logger.warning("GOOGLE_API_KEY не найден. Транскрибация может не работать.")
+    else:
+        logger.info("GOOGLE_API_KEY загружен.")
 
-# Временный тестовый код в bot.py или handlers.py
-test_message = """Процесс размышлений (скрыт): <tg-spoiler>Тут содержимое тега think, например, внутренний монолог модели. Модель пыталась понять запрос пользователя и сформулировать план ответа.</tg-spoiler>
+    register_handlers(dp)
+    logger.info(f"Очередь обработки голоса запускается с {VOICE_WORKERS_COUNT} воркерами.")
+    voice_queue.start()
 
-Основной ответ модели после think-тегов. Этот текст должен отображаться всегда, а текст в тегах spoiler будет скрыт до нажатия."""
-#bot.send_message(chat_id=1420597113, text=test_message, parse_mode='HTML')
-
-
-if __name__ == '__main__':
-    from config import VOICE_WORKERS_COUNT
-    from mod_llm import DEFAULT_MODEL, MODELS
-    print(f"Бот запущен с моделью по умолчанию: {DEFAULT_MODEL}")
-    print("Доступные модели:")
-    for model in MODELS:
-        print(f"- {model['name']} ({model['id']})")
-    print(f"\nОчередь обработки голоса запущена с {VOICE_WORKERS_COUNT} воркерами.")
-    print("Ожидание сообщений...")
-    
-    try:
-        bot.infinity_polling()
-    except KeyboardInterrupt:
-        print("\nПолучен сигнал остановки (Ctrl+C). Завершаем работу...")
-    finally:
-        # Останавливаем очередь при завершении работы бота
+async def on_shutdown():
+    if voice_queue:
         voice_queue.stop()
-        print("Бот остановлен.")
+    await bot.session.close()
+    logger.info("Бот остановлен.")
+
+async def main():
+    await on_startup()
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await on_shutdown()
+
+if __name__ == "__main__":
+    asyncio.run(main())

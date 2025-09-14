@@ -1,19 +1,20 @@
-# audio_utils.py
+# audio_utils.py - aiogram 3.x version
 import os
 import tempfile
 import logging
 import time
 import wave
+import asyncio
 from pydub import AudioSegment
 from google import genai
 from google.genai import types
-from config import  TRANSCRIPTION_MODEL, TRANSCRIPTION_PROMPT
+from config import TRANSCRIPTION_MODEL, TRANSCRIPTION_PROMPT
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # Настройка основного логгера
-logger = logging.getLogger('main')
+logger = logging.getLogger('audio_utils')
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     console_handler = logging.StreamHandler()
@@ -21,7 +22,7 @@ if not logger.handlers:
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-# Настройка отдельного логгера для TTS/Transcription времени обработки
+# Настройка отдельного логгера для времени обработки
 proc_time_logger = logging.getLogger('processing_time')
 proc_time_logger.setLevel(logging.INFO)
 if not proc_time_logger.handlers:
@@ -30,9 +31,6 @@ if not proc_time_logger.handlers:
     proc_time_handler.setFormatter(proc_time_formatter)
     proc_time_logger.addHandler(proc_time_handler)
     proc_time_logger.propagate = False
-
-# Получаем API ключ из .env (лучше передавать его как аргумент, см. ниже)
-# GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") # Не рекомендуется хранить здесь
 
 def get_audio_duration(ogg_file_path):
     """Определяет длительность аудиофайла в секундах"""
@@ -44,15 +42,15 @@ def get_audio_duration(ogg_file_path):
         logger.error(f"Ошибка определения длительности: {str(e)}")
         return 0
 
-def transcribe_with_gemini(ogg_file_path, api_key, model_version=None, prompt=None):
+def transcribe_with_gemini_sync(ogg_file_path, api_key, model_version=None, prompt=None):
     """
     Транскрибация аудио с использованием Gemini API.
     
     Args:
         ogg_file_path (str): Путь к OGG файлу.
         api_key (str): API ключ Google.
-        model_version (str, optional): Версия модели для транскрибации. Defaults to None (использует из config).
-        prompt (str, optional): Промт для транскрибации. Defaults to None (использует из config).
+        model_version (str, optional): Версия модели для транскрибации.
+        prompt (str, optional): Промт для транскрибации.
     
     Returns:
         str: Текст транскрибации или сообщение об ошибке.
@@ -67,7 +65,7 @@ def transcribe_with_gemini(ogg_file_path, api_key, model_version=None, prompt=No
         # Инициализируем клиент
         client = genai.Client(api_key=api_key)
         
-        # Загружаем аудиофайл в Gemini (API сам конвертирует формат)
+        # Загружаем аудиофайл в Gemini
         logger.info(f"Загружаю аудиофайл: {ogg_file_path}")
         uploaded_file = client.files.upload(file=ogg_file_path)
         logger.info(f"Файл загружен: {uploaded_file.display_name}")
@@ -76,7 +74,7 @@ def transcribe_with_gemini(ogg_file_path, api_key, model_version=None, prompt=No
         logger.info("Отправляю запрос на транскрибацию...")
         response = client.models.generate_content(
             model=model_to_use,
-            contents=[prompt_to_use, uploaded_file] # Передаем промт и файл
+            contents=[prompt_to_use, uploaded_file]
         )
         
         # Получаем текст результата
@@ -84,7 +82,6 @@ def transcribe_with_gemini(ogg_file_path, api_key, model_version=None, prompt=No
             transcription = response.text.strip()
             logger.info(f"Транскрибация завершена. Длина текста: {len(transcription)} символов")
         elif response.candidates and response.candidates[0].content.parts:
-             # Альтернативный способ получения текста, если response.text недоступен
             transcription = response.candidates[0].content.parts[0].text.strip()
             logger.info(f"Транскрибация завершена (альтернативный метод). Длина текста: {len(transcription)} символов")
         else:
@@ -103,62 +100,66 @@ def transcribe_with_gemini(ogg_file_path, api_key, model_version=None, prompt=No
             duration = get_audio_duration(ogg_file_path) if os.path.exists(ogg_file_path) else 0
             proc_time_logger.info(f"Метод: Gemini API, Длительность аудио: {duration:.2f} секунд, Время обработки: {elapsed_time:.2f} секунд")
         except:
-            pass # Игнорируем ошибки логирования времени
+            pass
 
-def process_voice_message(bot_instance, message, api_key):
+async def transcribe_with_gemini(ogg_file_path, api_key, model_version=None, prompt=None):
+    """Асинхронная обертка для транскрибации"""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None,
+        transcribe_with_gemini_sync,
+        ogg_file_path,
+        api_key,
+        model_version,
+        prompt
+    )
+
+async def process_voice_message(bot, message, api_key: str):
     """
-    Обработка голосового сообщения с выбором метода в зависимости от длительности.
-    В этой упрощенной версии всегда используется метод Gemini API.
-    
-    Args:
-        bot_instance: Экземпляр бота TeleBot.
-        message: Сообщение Telegram.
-        api_key (str): API ключ Google.
-    
-    Returns:
-        str: Текст транскрибации или сообщение об ошибке.
+    Асинхронная обработка голосового сообщения для aiogram 3.x
     """
     start_time = time.time()
     ogg_filename = None
+    
     try:
-        # Загрузка файла
         logger.info("Начинаю загрузку голосового сообщения...")
-        file_info = bot_instance.get_file(message.voice.file_id)
-        file_bytes = bot_instance.download_file(file_info.file_path)
-        logger.info("Голосовое сообщение загружено.")
-
-        # Сохранение OGG-файла временно
-        # Используем tempfile для более безопасного создания временных файлов
+        download_start_time = time.time()
+        
+        # Получаем информацию о файле
+        file_info = await bot.get_file(message.voice.file_id)
+        
+        # Скачиваем файл
+        file_bytes = await bot.download_file(file_info.file_path)
+        
+        download_end_time = time.time()
+        logger.info(f"Голосовое сообщение загружено за {download_end_time - download_start_time:.2f} секунд.")
+        
+        # Сохранение во временный файл
+        save_start_time = time.time()
         with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as tmp_file:
-            tmp_file.write(file_bytes)
+            tmp_file.write(file_bytes.read() if hasattr(file_bytes, 'read') else file_bytes)
             ogg_filename = tmp_file.name
-        logger.info(f"Аудио сохранено во временный файл: {ogg_filename}")
-
-        # Определяем длительность аудио (для логирования и потенциального будущего использования)
+        
+        save_end_time = time.time()
+        logger.info(f"Аудио сохранено во временный файл {ogg_filename} за {save_end_time - save_start_time:.2f} секунд.")
+        
+        # Определяем длительность аудио
         duration = get_audio_duration(ogg_filename)
         logger.info(f"Длительность аудио: {duration:.2f} секунд")
-
-        # Всегда используем метод транскрибации через Gemini API
+        
+        # Транскрибация через Gemini API
         logger.info("Используется метод транскрибации через Gemini API")
-        text = transcribe_with_gemini(ogg_filename, api_key) # Передаем api_key
-
+        transcribe_start_time = time.time()
+        text = await transcribe_with_gemini(ogg_filename, api_key)
+        transcribe_end_time = time.time()
+        logger.info(f"Транскрибация завершена за {transcribe_end_time - transcribe_start_time:.2f} секунд.")
+        
         return text
-
+        
     except Exception as e:
         logger.error(f"Ошибка обработки голосового сообщения: {e}", exc_info=True)
         return f"❌ Ошибка обработки голосового сообщения: {str(e)}"
     finally:
-        elapsed_time = time.time() - start_time
-        duration = 0.0 # Инициализируем переменную заранее
-
-        # Получаем длительность ДО удаления файла
-        if ogg_filename and os.path.exists(ogg_filename):
-            try:
-                duration = get_audio_duration(ogg_filename)
-                logger.info(f"Длительность аудио для логирования: {duration:.2f} секунд")
-            except Exception as e:
-                logger.warning(f"Не удалось определить длительность перед удалением файла {ogg_filename}: {e}")
-    
         # Удаление временных файлов
         if ogg_filename and os.path.exists(ogg_filename):
             try:
@@ -166,23 +167,19 @@ def process_voice_message(bot_instance, message, api_key):
                 logger.info(f"Временный файл {ogg_filename} удален.")
             except Exception as e:
                 logger.warning(f"Не удалось удалить временный файл {ogg_filename}: {e}")
-    
-        # Логируем общее время обработки голосового сообщения
-        try:
-            proc_time_logger.info(f"Общее время обработки голосового сообщения (длительность {duration:.2f} сек): {elapsed_time:.2f} секунд")
-        except Exception as e:
-            logger.warning(f"Не удалось записать время обработки в лог: {e}")
+        
+        total_elapsed_time = time.time() - start_time
+        proc_time_logger.info(f"Метод: process_voice_message, Общая длительность: {total_elapsed_time:.2f} секунд")
 
-
-
-def generate_audio_to_opus(text: str, model_version: str, api_key: str) -> tuple[bool, str]:
+async def generate_audio_to_opus(text: str, model_version: str, api_key: str) -> tuple[bool, str]:
+    """Генерация аудио в формате OPUS для Telegram"""
     try:
-        logger.info(f"Generating audio for text: {text[:50]}...")
-
+        logger.info(f"Генерирую аудио для текста: {text[:50]}...")
         client = genai.Client(api_key=api_key)
-
-        # Правильный формат запроса для google-genai 1.23.0
-        response = client.models.generate_content(
+        
+        # Правильный формат запроса для google-genai
+        response = await asyncio.to_thread(
+            client.models.generate_content,
             model=model_version,
             contents=text,
             config=types.GenerateContentConfig(
@@ -191,14 +188,14 @@ def generate_audio_to_opus(text: str, model_version: str, api_key: str) -> tuple
                     voice_config=types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
                             voice_name='Sulafat',
+                        )
+                    ),
+                )
             )
-         )
-      ),
-   )
-)
-
-        logger.info(f"Received response from Gemini")
-
+        )
+        
+        logger.info("Получен ответ от Gemini")
+        
         # Проверяем наличие данных в ответе
         if not response.candidates:
             logger.error("No candidates in response")
@@ -208,40 +205,39 @@ def generate_audio_to_opus(text: str, model_version: str, api_key: str) -> tuple
         logger.info(f"Candidate: {candidate}")
         
         # Извлекаем аудио данные из ответа
+        audio_data = None
         if hasattr(candidate, 'content') and candidate.content.parts:
             for part in candidate.content.parts:
                 if hasattr(part, 'inline_data') and part.inline_data:
                     audio_data = part.inline_data.data
                     break
-            else:
-                logger.error("No inline data found in response parts")
-                return (False, "No inline data found in response parts")
-        else:
-            logger.error("No content parts in response")
-            return (False, "No content parts in response")
-
-        logger.info(f"Received audio data: {len(audio_data)} bytes")
-
+        
+        if not audio_data:
+            logger.error("No inline data found in response parts")
+            return (False, "No inline data found in response parts")
+        
+        logger.info(f"Получены аудиоданные: {len(audio_data)} байт")
+        
         # Создаем временный WAV файл
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_wav:
             wav_filename = tmp_wav.name
         
         # Сохраняем PCM в WAV
         with wave.open(wav_filename, 'wb') as wf:
-            wf.setnchannels(1)      # моно
-            wf.setsampwidth(2)      # 2 байта (16 бит)
+            wf.setnchannels(1)  # моно
+            wf.setsampwidth(2)  # 2 байта (16 бит)
             wf.setframerate(24000)  # частота дискретизации
             wf.writeframes(audio_data)
         
-        logger.info(f"Created WAV file: {wav_filename} ({os.path.getsize(wav_filename)} bytes)")
-
+        logger.info(f"Создан WAV файл: {wav_filename} ({os.path.getsize(wav_filename)} байт)")
+        
         # Конвертируем WAV в OPUS
         opus_filename = wav_filename.replace('.wav', '.opus')
         audio = AudioSegment.from_wav(wav_filename)
         
         # Оптимальные параметры для Telegram
         audio.export(
-            opus_filename, 
+            opus_filename,
             format='opus',
             codec='libopus',
             bitrate='64k',
@@ -251,9 +247,10 @@ def generate_audio_to_opus(text: str, model_version: str, api_key: str) -> tuple
         # Удаляем временный WAV файл
         os.unlink(wav_filename)
         
-        logger.info(f"Created OPUS file: {opus_filename} ({os.path.getsize(opus_filename)} bytes)")
+        logger.info(f"Создан OPUS файл: {opus_filename} ({os.path.getsize(opus_filename)} байт)")
+        
         return (True, opus_filename)
         
     except Exception as e:
-        logger.exception(f"Error in generate_audio_to_opus: {str(e)}")
+        logger.exception(f"Ошибка в generate_audio_to_opus: {str(e)}")
         return (False, str(e))
