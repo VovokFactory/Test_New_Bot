@@ -1,5 +1,5 @@
 # services/gemini_service.py
-"""Сервис для генерации ответов моделями семейства Gemini."""
+"""Сервис для генерации ответов моделями семейства Gemini с включённым поиском."""
 import logging
 from google import genai
 from google.genai import types
@@ -37,11 +37,9 @@ def truncate_context(context_messages: list[types.Content],
                      image_tokens: int) -> list[types.Content]:
     if not context_messages:
         return context_messages
-
     current_req = prompt_tokens + image_tokens
     if current_req > max_ctx_tokens:
         raise ValueError("Ваш запрос (включая изображение) слишком велик для обработки моделью.")
-
     ctx_tokens = 0
     for msg in context_messages:
         for part in msg.parts:
@@ -49,11 +47,9 @@ def truncate_context(context_messages: list[types.Content],
                 ctx_tokens += len(part.text) // 4
             elif getattr(part, "inline_data", None) and getattr(part.inline_data, "data", None):
                 ctx_tokens += 256
-
     total_needed = ctx_tokens + current_req
     if total_needed <= max_ctx_tokens:
         return context_messages
-
     truncated = list(context_messages)
     while truncated and total_needed > max_ctx_tokens:
         removed = truncated.pop(0)
@@ -68,8 +64,8 @@ def truncate_context(context_messages: list[types.Content],
 
 def generate_response_gemini(chat_id: int, prompt: str, image_bytes: bytes | None = None) -> str:
     """
-    Синхронная генерация ответа для семейства Gemini.
-    Вызов из async‑кода выполнять через asyncio.to_thread(...).
+    Синхронная генерация ответа для Gemini.
+    Вызывать из async-кода через asyncio.to_thread(...).
     """
     try:
         model_id = get_chat_model(chat_id)
@@ -81,7 +77,7 @@ def generate_response_gemini(chat_id: int, prompt: str, image_bytes: bytes | Non
         user_parts: list[types.Part] = [types.Part.from_text(text=prompt_str)]
         image_tokens = 0
 
-        # Жёсткая проверка типа для картинки: только bytes; иначе не добавляем
+        # Картинка только как bytes → Part.from_bytes
         if isinstance(image_bytes, (bytes, bytearray)) and len(image_bytes) > 0:
             try:
                 img_part = types.Part.from_bytes(data=bytes(image_bytes), mime_type="image/jpeg")
@@ -90,8 +86,8 @@ def generate_response_gemini(chat_id: int, prompt: str, image_bytes: bytes | Non
             user_parts.append(img_part)
             image_tokens = 256
 
-        # Исторический контекст -> только роли 'user' и 'model'
-        history = get_context(chat_id)  # [{'role','content','timestamp'}, ...]
+        # История → только роли user/model
+        history = get_context(chat_id)
         ctx_contents: list[types.Content] = []
         for m in history:
             role_norm = normalize_role(m.get("role", "user"))
@@ -102,8 +98,14 @@ def generate_response_gemini(chat_id: int, prompt: str, image_bytes: bytes | Non
 
         max_ctx_tokens = get_model_limit_for_chat(chat_id)
         prompt_tokens = len(prompt_str) // 4
-
         trimmed_ctx = truncate_context(ctx_contents, max_ctx_tokens, prompt_tokens, image_tokens)
+
+        # ВКЛЮЧАЕМ ПОИСК GOOGLE как tool
+        google_search_tool = types.Tool(google_search=types.GoogleSearch())
+        config = types.GenerateContentConfig(
+            tools=[google_search_tool],
+            response_modalities=["TEXT"],
+        )
 
         contents: list[types.Content] = []
         contents.extend(trimmed_ctx)
@@ -111,10 +113,11 @@ def generate_response_gemini(chat_id: int, prompt: str, image_bytes: bytes | Non
 
         resp = client.models.generate_content(
             model=model_id,
-            contents=contents
+            contents=contents,
+            config=config,
         )
 
-        # Обновляем контекст (ответ хранить как 'model' для совместимости)
+        # Обновляем контекст
         add_to_context(chat_id, "user", prompt_str)
 
         text_out = ""
@@ -139,4 +142,3 @@ def generate_response_gemini(chat_id: int, prompt: str, image_bytes: bytes | Non
     except Exception as e:
         logger.error(f"Ошибка генерации ответа (Gemini): {e}", exc_info=True)
         return f"❌ Ошибка генерации ответа: {e}"
-

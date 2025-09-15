@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import LOG_TO_CONSOLE, VOICE_WORKERS_COUNT
-from bot.handlers.__init__old import register_handlers
+from bot.handlers import register_handlers  # <-- корректный импорт
 from services.voice_queue import get_voice_queue
 
 load_dotenv(override=True)

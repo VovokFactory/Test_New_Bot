@@ -1,76 +1,81 @@
 # services/audio_service.py
-"""Сервис для работы с аудио"""
-
+"""Сервис озвучки: сначала текстовый статус, затем отдельный эмодзи, по готовности — удаление эмодзи, правка статуса и отправка аудио."""
 import logging
 import os
-from telebot import TeleBot
-from audio_utils import generate_audio_to_opus, process_voice_message
-
+from aiogram import Bot
+from aiogram.types import FSInputFile
+from audio_utils import generate_audio_to_opus
 
 logger = logging.getLogger(__name__)
 
-def process_voice_message_service(bot: TeleBot, message) -> str:
-    """Обработка голосового сообщения"""
-    return process_voice_message(bot, message)
-
-def send_audio_response(chat_id: int, text: str, bot: TeleBot):
-    """Отправка голосового сообщения через audio_utils"""
-    repl = bot.send_message(chat_id, "🎙")
-    logger.info(f"Sending audio for: {text[:50]}...")
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-    # TODO: Получать модель из настроек чата
-    success, result = generate_audio_to_opus(text, "gemini-2.5-flash-preview-tts", GOOGLE_API_KEY)
-    if success:
-        audio_path = result
-        try:
-            # Проверяем существование файла
-            if not os.path.exists(audio_path):
-                error_msg = f"❌ Аудио файл не найден: {audio_path}"
-                logger.error(error_msg)
-                bot.send_message(chat_id, error_msg)
-                return
-            # Проверяем размер файла
-            file_size = os.path.getsize(audio_path)
-            logger.info(f"Audio file size: {file_size} bytes")
-            if file_size == 0:
-                error_msg = "❌ Аудио файл пустой"
-                logger.error(error_msg)
-                bot.send_message(chat_id, error_msg)
-                return
-            # Отправляем файл
-            bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=repl.message_id,
-                text="🎙 Голосовой ответ готов!"
-        )
-            with open(audio_path, 'rb') as audio_file:
-                bot.send_audio(chat_id, audio_file)
-                logger.info("Audio sent successfully")
-            # Удаляем временный файл
-            os.remove(audio_path)
-            logger.info("Temporary file removed")
-        except Exception as e:
-            error_msg = f"❌ Ошибка отправки аудио: {str(e)}"
-            logger.exception(error_msg)
-            bot.send_message(chat_id, error_msg)
-    else:
-        error_msg = f"❌ Ошибка генерации аудио: {result}"
-        logger.error(error_msg)
-        bot.send_message(chat_id, error_msg)
-
-def send_audio_with_progress(chat_id: int, message, answer: str, bot: TeleBot):
-    """Отправка аудио с прогрессом"""
-    # 1. Анимация и сообщение о начале озвучивания
-    bot.send_chat_action(chat_id, 'record_audio')  # Анимация "Запись аудио"
-    progress_audio = bot.reply_to(
-        message,
-        "_Озвучиваю аудиоверсию... Это может занять несколько минут_",
-        reply_to_message_id=message.id,
-        parse_mode='Markdown'
+async def send_audio_with_progress(
+    bot: Bot,
+    chat_id: int,
+    text: str,
+    reply_to_message_id: int | None = None
+):
+    # 1) Текстовый статус
+    status_msg = await bot.send_message(
+        chat_id,
+        "Генерирую аудиоответ, это может занять несколько минут..."
     )
-    
+    # 2) Отдельный эмодзи (большой/анимируется, пока один)
+    icon_msg = await bot.send_message(chat_id, "🎙")
 
-    # 2. Генерация и отправка аудио
-    send_audio_response(chat_id, answer, bot)
-    # 3. Удалить промежуточное сообщение
-    bot.delete_message(chat_id, progress_audio.id)
+    google_api_key = os.getenv("GOOGLE_API_KEY")
+    tts_model = "gemini-2.5-flash-preview-tts"
+
+    ok = False
+    result_path_or_error = ""
+    try:
+        ok, result_path_or_error = await generate_audio_to_opus(text, tts_model, google_api_key)
+
+        # Удаляем эмодзи независимо от успеха
+        try:
+            await bot.delete_message(chat_id, icon_msg.message_id)
+        except Exception:
+            pass
+
+        if not ok:
+            # Обновляем статус — ошибка
+            try:
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=status_msg.message_id,
+                    text=f"❌ Ошибка генерации аудио: {result_path_or_error}"
+                )
+            except Exception:
+                pass
+            return
+
+        # Обновляем статус — готово
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_msg.message_id,
+                text="🎙 Голосовой ответ готов!"
+            )
+        except Exception:
+            pass
+
+        # Отправляем файл
+        audio = FSInputFile(result_path_or_error)
+        await bot.send_audio(chat_id, audio, reply_to_message_id=reply_to_message_id)
+
+    except Exception as e:
+        logger.exception(f"TTS send error: {e}")
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_msg.message_id,
+                text=f"❌ Ошибка при отправке аудио: {e}"
+            )
+        except Exception:
+            pass
+    finally:
+        # Чистим временный файл, если он существует
+        try:
+            if ok and isinstance(result_path_or_error, str) and os.path.exists(result_path_or_error):
+                os.remove(result_path_or_error)
+        except Exception:
+            pass
