@@ -41,6 +41,7 @@ coverage.xml
 .hypothesis/
 test_code/
 temp/
+test_audio/
 
 
 # MyPy / Pylint
